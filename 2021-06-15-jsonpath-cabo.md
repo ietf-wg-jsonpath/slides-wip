@@ -93,17 +93,17 @@ Discussion happens under both PRs (sorry about that)
 
 How powerful should the expression language be?
 
-* should it have arithmetic operations (`+ - * / %`)?
-* should it have function calls?
-* should there be literals (or constructor notations) for structured values?
+* should it have *arithmetic* operations (`+ - * / %`)?
+* should it have *function* calls?
+* should there be literals (or constructor notations) for *structured* values?
 
-What is our stance to implicit conversions?
+What is our stance on implicit conversions?
 (Emerging consensus was: No implicit conversions.)
 What about conversion to Boolean ("truthy")?
 
 # Example: Comparison with structured values
 
-Should comparison with structured values (e.g., @.foo == [1, 2]) be supported?
+*Should comparison with structured values (e.g., @.foo == [1, 2]) be supported?*
 
 If it is not supported, should this silently fail or the attempt cause a syntax error (in #99, it causes a syntax error, but then the text says something else).
 
@@ -124,7 +124,7 @@ So, with respect to types imported from JSON, we have
 
 (Note that "container" is useful to name the container itself, as opposed to including what's in there.)
 
-# Stefan's topics: Selectors
+# Stefan's topics: Terminology for Selectors
 
 * Fundamental point is the alternate wording in text ... :
     * ... selects a value.
@@ -132,10 +132,11 @@ So, with respect to types imported from JSON, we have
 
 Both is possible with JSONPath, but we should stick with one throughout the text.
 
-(cabo: 
+(cabo:
 Clearly, we are selecting nodes, which contain their values.)
 
 ---
+# Stefan's topics: Syntax
 
 * Is a dot-member name allowed to start with a DIGIT?
 
@@ -148,29 +149,104 @@ related: what does `.1` applied to `[1, 2, 3]` mean?)
 
 ---
 
+* Discuss the proposed lean backward compatible syntax `[?<expr>]` in
+  contrast to original `[?(<expr>)]`.
+
+```
+https://github.com/ietf-wg-jsonpath/draft-ietf-jsonpath-base/pull/98#discussion_r649696672
+```
+
+> *The parentheses create a level of human-readability that I'm afraid will be lost by removing them.*
+-- Greg
+
+Or could the use of parentheses be a convention instead?
+
+
+---
+
+* Whitespace
+
+Needs to be explicitly allowed (ABNF).
+
+Where *should* it be allowed?
+
+# Semantics
+
 * Do we need to specify the order of evaluation of the
   descendant-selector?
 
 ---
 
-* Discuss the proposed lean backward compatible syntax `[?<expr>]` in contrast to original `[?(<expr>)]`.
+What is our stance on *implicit conversions*?
+(Emerging consensus was: No implicit conversions.)
+What about implicit conversion to Boolean ("truthy")?
+
+```
+https://github.com/ietf-wg-jsonpath/draft-ietf-jsonpath-base/pull/98#discussion_r649624505
+```
+
+* How much out there will be broken by being strict?
+* How much does the cleanup give us?
+  * vs., can small concessions have a big benefit?
 
 ---
+
+# Extent of functionality
+
 * Discuss proposal of `in-op` operator.
+
+(cabo:
+Note that the proposed syntax doesn't say what the production
+`container` is supposed to be.
+Same for `regex`.
+All this should be over in the expression language.)
 
 ---
 
 * Should comparison with structured values be allowed?
 
+```
+* Comparisons are restricted to primitive values `number`, `string`, `true`, `false`, `null`.
+  Comparisons with complex values will fail, i.e. no selection occurs.
+```
+
 (cabo:
 This first requires defining literal and/or constructor syntax for structured values.)
+
+> *An expression should be able to operate on any JSON literal. I see no reason why @.foo == [1, 2] should be disallowed.*
+-- Greg
 
 ---
 
 * What's the opinion about supporting functions?
 
+``` abnf
+calc_val     = func "(" [rel-path-val / json-path] ")"
+```
+
+```
+https://github.com/ietf-wg-jsonpath/draft-ietf-jsonpath-base/pull/98#discussion_r649700312
+```
 
 Related to this is:
 How to access a specific member in `{...,"key":5,...}` via filter expression `[?@...]` ?
 
 
+---
+
+* extent of `rel-path-val`
+
+> $[?(@..foo contains 42)]
+
+
+```
+https://github.com/ietf-wg-jsonpath/draft-ietf-jsonpath-base/pull/98#discussion_r649710822
+```
+
+---
+
+* filter selectors in unions?
+
+```
+https://github.com/ietf-wg-jsonpath/draft-ietf-jsonpath-base/pull/98#discussion_r649694182
+```
