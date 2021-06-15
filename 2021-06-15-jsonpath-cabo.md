@@ -58,6 +58,20 @@ Uncaught SyntaxError: Unexpected token ' in JSON at position 2
 JavaScript string literals: way more permissive.  Irrelevant.
 
 
+# PR
+
+```
+String:
+ : A sequence of UTF-8 characters surrounded by either single quotes (`)
+   or double quotes (").
+   Escaping quote characters is required only for the specific character
+   which surrounds the string.
+   For example, a double quote character (") within a string surrounded
+   by single quotes (') does not need to be escaped.
+   Single quotes are preferred.
+```
+
+
 # JSONPath string literals (#97)
 
 *JSONPath* string literals:
@@ -101,6 +115,107 @@ What is our stance on implicit conversions?
 (Emerging consensus was: No implicit conversions.)
 What about conversion to Boolean ("truthy")?
 
+---
+
+```
+quoted-member-name  =  %x22 *double-quoted %x22 /       ; "string"
+                       %x27 *single-quoted %x27         ; 'string'
+
+double-quoted       = unescaped /
+                      %x27      /                       ; '
+                      ESC %x22  /                       ; \"
+                      ESC escapable
+
+single-quoted       = unescaped /
+                      %x22      /                       ; "
+                      ESC %x27  /                       ; \'
+                      ESC escapable
+
+ESC                 = %x5C                              ; \  backslash
+
+unescaped           = %x20-21 /                         ; s. RFC 8259
+                      %x23-26 /                         ; omit "
+                      %x28-5B /                         ; omit '
+                      %x5D-10FFFF                       ; omit \
+
+escapable           = (
+                          b /         ;  BS backspace U+0008
+                          t /         ;  HT horizontal tab U+0009
+                          n /         ;  LF line feed U+000A
+                          f /         ;  FF form feed U+000C
+                          r /         ;  CR carriage return U+000D
+                          / /         ;  /  slash (solidus)
+                          \ /         ;  \  backslash (reverse solidus)
+                          u 4HEXDIG   ;  uXXXX      U+XXXX
+                      )
+HEXDIG              = %x41-46 /           ;  A-F
+                      %x61-66             ;  a-f
+```
+
+---
+
+for now, converging to...
+
+```
+fix boolean-expr = *logical-expr
+fix logical-expr = [neg-op] ["("] comp-expr *[logical-op comp-expr] [")"]
+neg-op       = "!"                                  ; not operator
+logical-op   = "||" / "&&"                          ; logical operator
+comp-expr    = (rel-path-val
+                ) [(comp-op comparable /  ; comparison
+                            regex-op regex     /  ; RegEx test
+                            in-op container )]    ; containment test
+comp-op      = "==" / "!=" /                        ; comparison ...
+               "<"  / ">"  /                        ; operators
+               "<=" / ">="
+regex-op     = "~="                                 ; RegEx match
+in-op        = " in "                               ; in operator
+comparable   = number / quoted-string /             ; primitive ...
+               true / false / null /                ; values only
+               rel-path-val /                       ; descendant value
+               json-path                            ; any value
+
+rel-path-val = "@" *(dot-selector / index-selector)
+
+```
+
+---
+```
+boolean-expr = *logical-expr
+logical-expr = [neg-op] ["("] comp-expr *[logical-op comp-expr] [")"]
+neg-op       = "!"                                  ; not operator
+logical-op   = "||" / "&&"                          ; logical operator
+comp-expr    = (rel-path-val /
+                calc-val) [(comp-op comparable /  ; comparison
+                            regex-op regex     /  ; RegEx test
+                            in-op container )]    ; containment test
+comp-op      = "==" / "!=" /                        ; comparison ...
+               "<"  / ">"  /                        ; operators
+               "<=" / ">="
+regex-op     = "~="                                 ; RegEx match
+in-op        = " in "                               ; in operator
+comparable   = number / quoted-string /             ; primitive ...
+               true / false / null /                ; values only
+               rel-path-val /                       ; descendant value
+               calc_val /                           ; calculated value
+               json-path                            ; any value
+
+rel-path-val = "@" *(dot-selector / index-selector)
+calc_val     = func "(" [rel-path-val / json-path] ")"
+func         = "index"
+
+```
+
+---
+
+```
+@.foo in ["a", "b"]
+
+"a" in @.foo
+```
+
+---
+
 # Example: Comparison with structured values
 
 *Should comparison with structured values (e.g., @.foo == [1, 2]) be supported?*
@@ -138,14 +253,43 @@ Clearly, we are selecting nodes, which contain their values.)
 ---
 # Stefan's topics: Syntax
 
-* Is a dot-member name allowed to start with a DIGIT?
+* Is a dot-member name allowed to start with a DIGIT? ➔ No.
 
 (cabo:
 related: what does `.1` applied to `[1, 2, 3]` mean?)
 
+~~~~ abnf
+dot-selector    = "." dot-member-first *dot-member-char
+dot-member-name-first = 
+                      ALPHA /
+                      "_"   /           ; _
+                      %x80-10FFFF       ; any non-ASCII Unicode character
+dot-member-name-char = 
+                      DIGIT /
+                      ALPHA /
+                      "_"   /           ; _
+                      %x80-10FFFF       ; any non-ASCII Unicode character
+                    
+DIGIT           =  %x30-39              ; 0-9
+ALPHA           =  %x41-5A / %x61-7A    ; A-Z / a-z
+~~~~
+
+
 ---
 
-* Are unions allowed to contain wildcards, descendant-selectors and filter-selectors?
+* Are unions allowed to contain wildcards (no, as all others become redundant then), descendant-selectors (no) and filter-selectors (to do in separate PR)?
+
+(manage syntactical ambiguity, though!)
+
+~~~~ abnf
+union-selector = "[" ws union-entry 1*(ws "," ws union-entry) ws "]"
+
+union-entry    =  ( quoted-member-name /
+                    element-index      /
+                    slice-index
+                  )
+~~~~
+
 
 ---
 
@@ -160,7 +304,8 @@ https://github.com/ietf-wg-jsonpath/draft-ietf-jsonpath-base/pull/98#discussion_
 -- Greg
 
 Or could the use of parentheses be a convention instead?
-
+(But do consider the interoperability impact!)
+➔ no change!
 
 ---
 
@@ -168,18 +313,37 @@ Or could the use of parentheses be a convention instead?
 
 Needs to be explicitly allowed (ABNF).
 
-Where *should* it be allowed?
+```
+     grpent = [occur S] [memberkey S] type
+            / [occur S] groupname [genericarg]  ; preempted by above
+            / [occur S] "(" S group S ")"
+```
+
+Where *should* it be allowed (and be insignificant)?
+(#24)
+multi-line queries?
+
+➔ Keep issue open for future PR (be generous with whitespace)
+(Add note: To do (#24))
 
 # Semantics
 
 * Do we need to specify the order of evaluation of the
   descendant-selector?
 
+➔ Yes.  Do in separate PR.
+
+Want to be deterministic for testing.
+But we don't want to require it.
+Define deterministic order, and encourage its use.
+
 ---
 
 What is our stance on *implicit conversions*?
 (Emerging consensus was: No implicit conversions.)
 What about implicit conversion to Boolean ("truthy")?
+➔ No.
+But then there is the existence aspect.
 
 ```
 https://github.com/ietf-wg-jsonpath/draft-ietf-jsonpath-base/pull/98#discussion_r649624505
@@ -191,9 +355,9 @@ https://github.com/ietf-wg-jsonpath/draft-ietf-jsonpath-base/pull/98#discussion_
 
 ---
 
-# Extent of functionality
+# Extent of functionality (already discussed above)
 
-* Discuss proposal of `in-op` operator.
+* Discuss proposal of `in-op` operator
 
 (cabo:
 Note that the proposed syntax doesn't say what the production
@@ -250,3 +414,5 @@ https://github.com/ietf-wg-jsonpath/draft-ietf-jsonpath-base/pull/98#discussion_
 ```
 https://github.com/ietf-wg-jsonpath/draft-ietf-jsonpath-base/pull/98#discussion_r649694182
 ```
+
+➔ left to further PR
